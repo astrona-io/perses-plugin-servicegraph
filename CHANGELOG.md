@@ -4,6 +4,18 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [0.5.0] - 2026-11-13
+
+### Added
+
+- The requester picked in the panel is kept in the URL (`?requester=<name>`, `*` for All flows), so
+  a reload or a shared link opens the same flow. Changing the `root` variable still starts over
+  from it.
+
+### Changed
+
+- README screenshots show the details panel, full request time and same-size nodes.
+
 ## [0.4.0] - 2026-11-13
 
 ### Added

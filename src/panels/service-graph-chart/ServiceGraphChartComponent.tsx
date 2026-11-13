@@ -1,4 +1,11 @@
-import { ReactElement, useCallback, useEffect, useMemo, useState } from "react";
+import {
+  ReactElement,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   Box,
   MenuItem,
@@ -57,9 +64,28 @@ export function ServiceGraphChartComponent(
   const { results, isLoading, error, namespacePattern, rootPattern } =
     useServiceGraphData(spec, o);
 
-  // The requester picked in the panel; undefined follows the spec's `root` (usually a variable).
-  const [picked, setPicked] = useState<string | undefined>();
-  useEffect(() => setPicked(undefined), [rootPattern]);
+  // The requester picked in the panel; undefined follows the spec's `root` (usually a variable). It is
+  // kept in the URL, so a reload or a shared link opens the same flow.
+  const [picked, setPickedState] = useState<string | undefined>(
+    readRequesterParam,
+  );
+  const setPicked = useCallback((v: string | undefined): void => {
+    const next = v === ROOT_PATTERN ? undefined : v;
+    setPickedState(next);
+    writeRequesterParam(next);
+  }, []);
+  // A changed `root` (the variable) starts over from it. Only once data has loaded: until then the
+  // variables are still resolving, and that must not drop a requester the URL brought.
+  const settledRoot = useRef<string | undefined>();
+  useEffect(() => {
+    if (!results) return;
+    if (
+      settledRoot.current !== undefined &&
+      settledRoot.current !== rootPattern
+    )
+      setPicked(undefined);
+    settledRoot.current = rootPattern;
+  }, [results, rootPattern, setPicked]);
   const flowPattern =
     picked === undefined
       ? rootPattern
@@ -380,6 +406,31 @@ function RequesterPicker({
         );
       })}
     </TextField>
+  );
+}
+
+/** URL query parameter holding the picked requester; `*` is "All flows". */
+const REQUESTER_PARAM = "requester";
+
+function readRequesterParam(): string | undefined {
+  const v = new URLSearchParams(window.location.search).get(REQUESTER_PARAM);
+  if (!v) return undefined;
+  return v === "*" ? ALL_FLOWS : v;
+}
+
+/**
+ * Replaces the current history entry, keeping its state and every other parameter. The `popstate`
+ * tells the app's router about the new URL; without it, the next time range or variable change
+ * rebuilds the URL from the router's copy and drops the parameter.
+ */
+function writeRequesterParam(v: string | undefined): void {
+  const url = new URL(window.location.href);
+  if (v === undefined) url.searchParams.delete(REQUESTER_PARAM);
+  else url.searchParams.set(REQUESTER_PARAM, v === ALL_FLOWS ? "*" : v);
+  if (url.href === window.location.href) return;
+  window.history.replaceState(window.history.state, "", url);
+  window.dispatchEvent(
+    new PopStateEvent("popstate", { state: window.history.state }),
   );
 }
 
