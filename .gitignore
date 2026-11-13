@@ -16,6 +16,7 @@ dist/
 
 # generated archives
 *.tar.gz
+*.sha256
 
 # external CUE dependencies
 /*/cue.mod/pkg/
