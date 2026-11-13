@@ -1,0 +1,32 @@
+{
+  "kind": "ServiceGraphChart",
+  "spec": {
+    "datasource": {
+      "kind": "PrometheusDatasource"
+    },
+    "metricPrefix": "traces_service_graph",
+    "clientLabel": "client",
+    "serverLabel": "server",
+    "connectionTypeLabel": "connection_type",
+    "namespace": "$namespace",
+    "clientNamespaceLabel": "client_k8s_namespace_name",
+    "serverNamespaceLabel": "server_k8s_namespace_name",
+    "namespaceMatch": "either",
+    "latencyPercentile": "p95",
+    "latencySource": "server",
+    "edgeColorBy": "errors",
+    "errorThresholds": {
+      "warning": 1,
+      "critical": 5
+    },
+    "latencyThresholds": {
+      "warning": 0.5,
+      "critical": 1
+    },
+    "layout": "hierarchical",
+    "edgeLabel": "rate",
+    "nodeSizeByThroughput": true,
+    "showUnconnected": false,
+    "showLegend": true
+  }
+}
