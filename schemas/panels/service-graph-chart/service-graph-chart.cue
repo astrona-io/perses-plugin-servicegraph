@@ -55,4 +55,11 @@ spec: close({
 	nodeSizeByThroughput?: bool
 	showUnconnected?:      bool
 	showLegend?:           bool
+
+	// Click a node or an edge for a details panel.
+	showDetails?: bool
+	// Full request time per node from TraceQL metrics.
+	showFullRequestTime?: bool
+	// Tempo datasource: a selector or a variable. The default Tempo datasource when unset.
+	traceDatasource?: close({kind: "TempoDatasource", name?: string}) | string
 })

@@ -27,7 +27,7 @@ work but are not tested; see [Why ECharts](#why-echarts) for the part most likel
 
 ## What it does
 
-- **Nodes** are services. Their size follows throughput (optional), their ring colour follows the
+- **Nodes** are services, all the same size (or sized by throughput, optional). Their ring colour follows the
   error ratio or latency of what they served, and their icon shows the kind of node (below).
 - **Edges** point from caller to callee. Width follows request rate, colour follows error ratio or
   latency, and an optional label shows rate, error ratio, latency, or rate with latency below it.
@@ -38,9 +38,20 @@ work but are not tested; see [Why ECharts](#why-echarts) for the part most likel
   kind and namespace; on an edge, request rate, error ratio with the failed rate, and the same
   percentiles. They are computed in the browser from the histogram buckets (one query, same result as
   `histogram_quantile`).
-- **Hover** a node to highlight its neighbours. **Click** a node to trace the flow through it: every
-  call on a path into it and everything it leads to downstream stay lit, the rest fades. Click it
-  again or the empty canvas to clear it.
+- **Hover** a node to highlight its neighbours. **Click** a node or an edge to trace the flow through
+  it: every call on a path into it and everything it leads to downstream stay lit, the rest fades.
+  Click it again or the empty canvas to clear it.
+- **Details panel.** The click also opens a panel on the right with everything about that node or
+  edge: traffic, error ratio, every latency percentile, the full request time, and the calls coming
+  in and going out, each with its rate and p95 and coloured like its edge. Click a call to move to
+  it; **Show the flow from …** makes a calling service the requester. `showDetails: false` turns the
+  panel off.
+- **Full request time.** For each node, how long whole requests took from the requester's first span
+  to the trace's last: the latency on an edge is one hop, this is the end-to-end time a request that
+  reached this node had. It is shown in the details panel (p25 to p99) and in the tooltips. With a
+  requester picked it counts only the traces that requester started; with **All flows**, every trace.
+  It comes from TraceQL metrics on the trace datasource (`traceDatasource`, the default
+  `TempoDatasource` when omitted); `showFullRequestTime: false` turns it off.
 - **Namespace filter.** With a namespace set (usually `$namespace`), the panel keeps edges where
   either end, both ends, only the caller or only the callee is in the namespace. Nodes outside it are
   dimmed and named `service (namespace)`.
@@ -167,6 +178,9 @@ plugin:
     serviceFilter: "checkout|payments"     # regex; keeps edges where either end matches
     root: user                             # where the requester picker starts; name, regex or $var; "" = all
     showRequesterPicker: true
+    showDetails: true                      # details panel on click
+    showFullRequestTime: true              # whole-trace duration, from traceDatasource
+    traceDatasource: { kind: TempoDatasource, name: tempo }  # default Tempo datasource when omitted
     latencyPercentile: p95                 # p50 | p90 | p95 | p99
     latencySource: server                  # server (callee) | client (caller, network included)
     edgeColorBy: errors                    # errors | latency
@@ -174,7 +188,7 @@ plugin:
     latencyThresholds: { warning: 0.5, critical: 1 }   # seconds
     layout: force                          # force | hierarchical
     edgeLabel: none                        # none | rate | errors | latency | rate-latency
-    nodeSizeByThroughput: true
+    nodeSizeByThroughput: false
     showUnconnected: false                 # keep nodes whose edges had no requests
     showLegend: true
 ```
@@ -311,6 +325,9 @@ COPY ServiceGraph-0.1.0.tar.gz /etc/perses/plugins-archive/
   range, not a time series. Set `window` for a shorter, more current view.
 - Latency percentiles are interpolated from histogram buckets and are only as precise as the
   generator's buckets.
+- Full request time is limited to the last 3 hours of the dashboard range, Tempo's default
+  `query_frontend.metrics.max_duration`. Tempo's `trace:duration` histogram has power-of-two buckets,
+  so the values are approximate, and a trace that calls a node many times weighs more for that node.
 - Calls from a service to itself count towards its totals but are not drawn.
 - In the hierarchical layout a long edge can pass behind a node in a middle column.
 

@@ -25,6 +25,7 @@ import {
   PROMETHEUS_DATASOURCE_KIND,
   ServiceGraphChartEditorProps,
   ServiceGraphChartOptions,
+  TEMPO_DATASOURCE_KIND,
   Thresholds,
 } from "./service-graph-chart-types";
 
@@ -221,6 +222,17 @@ export function ServiceGraphChartSettingsEditor(
             value={value.latencyMetric}
             onChange={(latencyMetric) => set({ latencyMetric })}
           />
+          <OptionsEditorControl
+            label="Trace datasource"
+            description="Tempo, for the full request time of whole traces"
+            control={
+              <DatasourceSelect
+                datasourcePluginKind={TEMPO_DATASOURCE_KIND}
+                value={value.traceDatasource ?? { kind: TEMPO_DATASOURCE_KIND }}
+                onChange={(traceDatasource) => set({ traceDatasource })}
+              />
+            }
+          />
         </OptionsEditorGroup>
         <OptionsEditorGroup title="Filter">
           <TextControl
@@ -305,7 +317,7 @@ export function ServiceGraphChartSettingsEditor(
             label="Node size by throughput"
             control={
               <Switch
-                checked={value.nodeSizeByThroughput ?? true}
+                checked={value.nodeSizeByThroughput ?? false}
                 onChange={(_, nodeSizeByThroughput) =>
                   set({ nodeSizeByThroughput })
                 }
@@ -319,6 +331,28 @@ export function ServiceGraphChartSettingsEditor(
               <Switch
                 checked={value.showUnconnected ?? false}
                 onChange={(_, showUnconnected) => set({ showUnconnected })}
+              />
+            }
+          />
+          <OptionsEditorControl
+            label="Details panel"
+            description="Click a node or edge to open its details on the right"
+            control={
+              <Switch
+                checked={value.showDetails ?? true}
+                onChange={(_, showDetails) => set({ showDetails })}
+              />
+            }
+          />
+          <OptionsEditorControl
+            label="Full request time"
+            description="Whole-trace duration from the requester to each node, from the trace datasource"
+            control={
+              <Switch
+                checked={value.showFullRequestTime ?? true}
+                onChange={(_, showFullRequestTime) =>
+                  set({ showFullRequestTime })
+                }
               />
             }
           />

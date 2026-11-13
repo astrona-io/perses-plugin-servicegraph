@@ -13,6 +13,7 @@ import {
   GraphEdge,
   GraphNode,
   NodeKind,
+  Percentiles,
   ServiceGraph,
   Severity,
   buildGraph,
@@ -31,6 +32,9 @@ import {
   resolveOptions,
 } from "./service-graph-chart-types";
 import { useServiceGraphData } from "./useServiceGraphData";
+import { useFullRequestTime } from "./useFullRequestTime";
+import { DetailPanel, Selection } from "./DetailPanel";
+import { KIND_LABELS, itemColor } from "./style";
 
 const NODE_SIZE = 34;
 const MIN_NODE = 18;
@@ -42,14 +46,6 @@ const MAX_UPSCALE = 1.6;
 const ALL_FLOWS = "\u0000all";
 /** Picker value for a `root` that is a pattern rather than one caller's name. */
 const ROOT_PATTERN = "\u0000pattern";
-
-const KIND_LABELS: Record<NodeKind, string> = {
-  service: "Service",
-  database: "Database",
-  messaging: "Messaging",
-  user: "User / unknown caller",
-  external: "Uninstrumented",
-};
 
 export function ServiceGraphChartComponent(
   props: ServiceGraphChartProps,
@@ -86,11 +82,41 @@ export function ServiceGraphChartComponent(
         ? rootPattern
         : ROOT_PATTERN);
 
-  const [selected, setSelected] = useState<string | undefined>();
+  // The clicked node or edge: its flow is highlighted and its details shown.
+  const [selection, setSelection] = useState<Selection | undefined>();
   useEffect(() => {
-    if (selected && !graph?.nodes.some((n) => n.id === selected))
-      setSelected(undefined);
-  }, [graph, selected]);
+    if (
+      selection &&
+      !(selection.type === "node" ? graph?.nodes : graph?.edges)?.some(
+        (x) => x.id === selection.id,
+      )
+    )
+      setSelection(undefined);
+  }, [graph, selection]);
+  const selected =
+    selection?.type === "edge"
+      ? graph?.edges.find((e) => e.id === selection.id)?.target
+      : selection?.id;
+
+  // Full request time is per requester: traces whose root span is in a requester's service. A root
+  // without spans of its own (the `user` entry point) stands for the services it calls.
+  const requesters = useMemo(() => {
+    if (!graph || graph.roots.length === 0) return undefined;
+    const kinds = new Map(graph.nodes.map((n) => [n.id, n.kind]));
+    const out = new Set<string>();
+    for (const r of graph.roots) {
+      const kind = kinds.get(r);
+      if (kind === "user" || kind === "external") {
+        for (const e of graph.edges) if (e.source === r) out.add(e.target);
+      } else out.add(r);
+    }
+    return [...out].sort();
+  }, [graph]);
+  const full = useFullRequestTime(
+    spec,
+    o.showFullRequestTime && !!graph,
+    requesters,
+  );
 
   // Positions depend on the structure only, so a click or a refresh with the same edges keeps them.
   const structureKey = useMemo(
@@ -136,22 +162,58 @@ export function ServiceGraphChartComponent(
   );
 
   const onNodeClick = useCallback(
-    (id: string) => setSelected((cur) => (cur === id ? undefined : id)),
+    (id: string) =>
+      setSelection((cur) =>
+        cur?.type === "node" && cur.id === id
+          ? undefined
+          : { type: "node", id },
+      ),
     [],
   );
-  const onBlankClick = useCallback(() => setSelected(undefined), []);
+  const onEdgeClick = useCallback(
+    (id: string) =>
+      setSelection((cur) =>
+        cur?.type === "edge" && cur.id === id
+          ? undefined
+          : { type: "edge", id },
+      ),
+    [],
+  );
+  const onBlankClick = useCallback(() => setSelection(undefined), []);
 
   const width = contentDimensions?.width ?? 0;
   const height = contentDimensions?.height ?? 0;
+  const detailsOpen = o.showDetails && !!selection && !!graph;
+  const detailsWidth = Math.round(Math.min(360, Math.max(260, width * 0.32)));
+  // A wide panel makes room for the details; a narrow one lets them cover the graph.
+  const reserved =
+    detailsOpen && width - detailsWidth >= 360 ? detailsWidth : 0;
   const box = useMemo(
-    () => fitBox(positions, width, height, o.showLegend, o.showRequesterPicker),
-    [positions, width, height, o.showLegend, o.showRequesterPicker],
+    () =>
+      fitBox(
+        positions,
+        width - reserved,
+        height,
+        o.showLegend,
+        o.showRequesterPicker,
+      ),
+    [positions, width, reserved, height, o.showLegend, o.showRequesterPicker],
   );
 
+  const fullByNode = o.showFullRequestTime ? full.byNode : undefined;
   const option = useMemo(() => {
     if (!graph) return undefined;
-    return buildOption(graph, positions, o, colors, selected, muiTheme, box);
-  }, [graph, positions, o, colors, selected, muiTheme, box]);
+    return buildOption(
+      graph,
+      positions,
+      o,
+      colors,
+      selected,
+      muiTheme,
+      box,
+      fullByNode,
+    );
+  }, [graph, positions, o, colors, selected, muiTheme, box, fullByNode]);
 
   if (!contentDimensions) return null;
 
@@ -199,11 +261,17 @@ export function ServiceGraphChartComponent(
           width={contentDimensions.width}
           height={contentDimensions.height}
           onNodeClick={onNodeClick}
+          onEdgeClick={onEdgeClick}
           onBlankClick={onBlankClick}
         />
       ) : null}
       {o.showLegend && graph && !message ? (
-        <Legend graph={graph} options={o} colors={colors} />
+        <Legend
+          graph={graph}
+          options={o}
+          colors={colors}
+          rightInset={reserved}
+        />
       ) : null}
       {o.showRequesterPicker && graph && graph.callers.length > 0 ? (
         <RequesterPicker
@@ -212,6 +280,25 @@ export function ServiceGraphChartComponent(
           rootPattern={rootPattern}
           colors={colors}
           onChange={setPicked}
+        />
+      ) : null}
+      {detailsOpen && !message ? (
+        <DetailPanel
+          selection={selection!}
+          graph={graph!}
+          o={o}
+          colors={colors}
+          width={detailsWidth}
+          full={full}
+          requesterLabel={
+            graph!.roots.length > 0 ? graph!.roots.join(", ") : undefined
+          }
+          onSelect={setSelection}
+          onStartFlow={(id) => {
+            setPicked(id);
+            setSelection(undefined);
+          }}
+          onClose={onBlankClick}
         />
       ) : null}
     </Box>
@@ -298,42 +385,6 @@ function RequesterPicker({
 
 function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function hexToRgb(hex: string): [number, number, number] | undefined {
-  const m = /^#([0-9a-f]{6})$/i.exec(hex);
-  if (!m) return undefined;
-  const n = parseInt(m[1]!, 16);
-  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
-}
-
-function mix(a: string, b: string, t: number): string {
-  const ca = hexToRgb(a);
-  const cb = hexToRgb(b);
-  if (!ca || !cb) return t < 0.5 ? a : b;
-  const c = ca.map((v, i) => Math.round(v + (cb[i]! - v) * t));
-  return `rgb(${c.join(",")})`;
-}
-
-/**
- * Edge and ring colour. By latency it is a gradient: neutral under the warning threshold, then from the
- * warning colour at the warning threshold to the critical colour at the critical one (on a log scale,
- * so 100 ms to 1 s has its midpoint at about 316 ms). By errors it steps at the two thresholds.
- */
-export function itemColor(
-  item: { errorRatio: number; latency: number },
-  o: ResolvedOptions,
-  colors: LegendColors,
-): string {
-  if (o.edgeColorBy !== "latency")
-    return colors.severity[itemSeverity(item, o)];
-  const { warning, critical } = o.latencyThresholds;
-  const l = item.latency;
-  if (!Number.isFinite(l) || l < warning) return colors.severity.ok;
-  if (l >= critical || critical <= warning || warning <= 0)
-    return colors.severity.critical;
-  const t = Math.log(l / warning) / Math.log(critical / warning);
-  return mix(colors.severity.warning, colors.severity.critical, t);
 }
 
 function nodeSize(n: GraphNode, max: number, o: ResolvedOptions): number {
@@ -437,6 +488,7 @@ function buildOption(
   selected: string | undefined,
   muiTheme: MuiTheme,
   box: SeriesBox,
+  full: Map<string, Percentiles> | undefined,
 ): object {
   const text = muiTheme.palette.text;
   const paper = muiTheme.palette.background.paper;
@@ -523,6 +575,13 @@ function buildOption(
     };
   });
 
+  // Roots start the flow, so their full request time is their own.
+  const fullRequestRow = (id: string): Array<[string, string]> => {
+    const v = full?.get(id)?.[pct];
+    return v !== undefined && Number.isFinite(v) && !roots.has(id)
+      ? [[`Full request ${pct}`, formatSeconds(v)]]
+      : [];
+  };
   const nodeTooltip = (n: GraphNode): string => {
     const rows: Array<[string, string]> = [];
     if (n.inRate > 0) {
@@ -530,6 +589,7 @@ function buildOption(
       rows.push(["Errors", formatPercent(n.inFailed / n.inRate)]);
       rows.push(...latencyRows(n.percentiles, pct));
     }
+    rows.push(...fullRequestRow(n.id));
     if (n.outRate > 0) {
       rows.push(["Requests out", formatRate(n.outRate)]);
       if (n.inRate <= 0)
@@ -559,6 +619,7 @@ function buildOption(
         `${formatPercent(e.errorRatio)} (${formatRate(e.failedRate)})`,
       ],
       ...latencyRows(e.percentiles, pct),
+      ...fullRequestRow(e.target),
     ];
     const sev = severityLabel(itemSeverity(e, o), o);
     return tooltipHtml(

@@ -124,10 +124,13 @@ export function Legend({
   graph,
   options: o,
   colors,
+  rightInset = 0,
 }: {
   graph: ServiceGraph;
   options: ResolvedOptions;
   colors: LegendColors;
+  /** Width covered on the right, by the details panel. */
+  rightInset?: number;
 }): ReactElement {
   const latency = o.edgeColorBy === "latency";
   const t = latency ? o.latencyThresholds : o.errorThresholds;
@@ -140,7 +143,7 @@ export function Legend({
       sx={{
         position: "absolute",
         left: 8,
-        right: 8,
+        right: 8 + rightInset,
         bottom: 4,
         display: "flex",
         flexWrap: "wrap",

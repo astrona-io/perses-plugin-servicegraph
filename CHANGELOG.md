@@ -4,6 +4,23 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [0.4.0] - 2026-11-13
+
+### Added
+
+- Details panel: clicking a node or an edge opens a panel on the right with its traffic, error
+  ratio, latency p25 to p99, full request time and the calls in and out (rate, p95, colour). Calls
+  link to each other, and a calling service can be made the requester. `showDetails` turns it off.
+- Full request time: per node, the duration of whole traces from the requester's first span to the
+  last, from TraceQL metrics on a Tempo datasource (`traceDatasource`). Shown in the details panel
+  and the tooltips; `showFullRequestTime` turns it off.
+- Clicking an edge traces the flow through its callee, like clicking the node.
+
+### Changed
+
+- Nodes are all the same size by default; `nodeSizeByThroughput: true` scales them by request rate
+  as before.
+
 ## [0.3.0] - 2026-11-13
 
 ### Added

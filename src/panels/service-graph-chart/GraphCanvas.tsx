@@ -8,6 +8,8 @@ interface GraphCanvasProps {
   height: number;
   /** Called with the node id when a node is clicked. */
   onNodeClick: (id: string) => void;
+  /** Called with the edge id when an edge is clicked. */
+  onEdgeClick: (id: string) => void;
   /** Called when the empty canvas is clicked. */
   onBlankClick: () => void;
 }
@@ -27,12 +29,13 @@ export function GraphCanvas({
   width,
   height,
   onNodeClick,
+  onEdgeClick,
   onBlankClick,
 }: GraphCanvasProps): ReactElement {
   const ref = useRef<HTMLDivElement>(null);
   const chart = useRef<ECharts | null>(null);
-  const handlers = useRef({ onNodeClick, onBlankClick });
-  handlers.current = { onNodeClick, onBlankClick };
+  const handlers = useRef({ onNodeClick, onEdgeClick, onBlankClick });
+  handlers.current = { onNodeClick, onEdgeClick, onBlankClick };
 
   // (Re)create the chart when the theme changes (light/dark switch).
   useEffect(() => {
@@ -46,6 +49,8 @@ export function GraphCanvas({
         handlers.current.onNodeClick((params.data as { id: string }).id);
       } else if (params.dataType === "edge") {
         itemClicked = true;
+        const raw = (params.data as { raw?: { id: string } }).raw;
+        if (raw) handlers.current.onEdgeClick(raw.id);
       }
     });
     // zrender sees every click; ECharts' own click event fires first for items.
