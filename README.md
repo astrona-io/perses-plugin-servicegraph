@@ -8,9 +8,9 @@ the OpenTelemetry Collector
 Nodes are services and edges are requests between them. Both show request rate, error ratio and
 latency, and the graph can be limited to one Kubernetes namespace.
 
-![Dark theme, force layout, tooltip on payments with its neighbours highlighted](docs/service-graph-dark.png)
+![Dark theme, hierarchical flow from user coloured by p95 latency, details panel open on checkout with its full request time](docs/service-graph-dark.png)
 
-| Light theme, hierarchical layout, p95 latency | Panel editor |
+| Light theme, force layout, tooltip on payments with its flow highlighted | Panel editor |
 | --- | --- |
 | ![Light theme](docs/service-graph-light.png) | ![Settings editor](docs/settings-editor.png) |
 
@@ -20,7 +20,7 @@ The screenshots use synthetic data for a demo namespace, `shop`.
 
 | Plugin | Perses | Status |
 | --- | --- | --- |
-| 0.1.x – 0.3.x | v0.54.x | Tested with v0.54.0 |
+| 0.1.x – 0.5.x | v0.54.x | Tested with v0.54.0 |
 
 The plugin is built against `@perses-dev/*` 0.54 and `percli` v0.54.0. Other Perses minor versions may
 work but are not tested; see [Why ECharts](#why-echarts) for the part most likely to break.
@@ -60,7 +60,9 @@ work but are not tested; see [Why ECharts](#why-echarts) for the part most likel
   flow from it: the calls it makes, then the calls those lead to, down to the last hop. The requester
   is the only source, in the first column, in bold. **All flows** draws everything. The picker starts
   at `root` (a name, a regex, or a variable such as `$root`) and follows it when that changes;
-  `showRequesterPicker: false` hides it.
+  `showRequesterPicker: false` hides it. The pick is kept in the URL as `?requester=<name>`
+  (`requester=*` for **All flows**), so a reload or a shared link opens the same flow; every panel on
+  the dashboard reads the same parameter.
 - **Layouts:** force-directed, or hierarchical from left (entry points) to right (leaves).
   Disconnected parts of the graph are laid out separately and stacked, largest first. Both layouts are
   deterministic, so the graph does not jump between refreshes.
