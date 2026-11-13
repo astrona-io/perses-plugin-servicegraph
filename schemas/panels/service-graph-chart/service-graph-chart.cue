@@ -39,6 +39,8 @@ spec: close({
 	serviceFilter?: string
 	// Regex on node names, usually $root: only the flows these nodes start.
 	root?: string
+	// Requester picker in the panel, starting at root.
+	showRequesterPicker?: bool
 
 	latencyPercentile?: "p50" | "p90" | "p95" | "p99"
 	latencySource?:     "server" | "client"

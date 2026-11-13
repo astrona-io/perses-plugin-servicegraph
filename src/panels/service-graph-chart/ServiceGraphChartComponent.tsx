@@ -1,5 +1,13 @@
 import { ReactElement, useCallback, useEffect, useMemo, useState } from "react";
-import { Box, Theme, Typography, alpha, useTheme } from "@mui/material";
+import {
+  Box,
+  MenuItem,
+  TextField,
+  Theme,
+  Typography,
+  alpha,
+  useTheme,
+} from "@mui/material";
 import { LoadingOverlay, useChartsTheme } from "@perses-dev/components";
 import {
   GraphEdge,
@@ -8,6 +16,7 @@ import {
   ServiceGraph,
   Severity,
   buildGraph,
+  flowThrough,
   itemSeverity,
 } from "./graph";
 import { escapeHtml, formatPercent, formatRate, formatSeconds } from "./format";
@@ -18,6 +27,7 @@ import { Legend, LegendColors } from "./Legend";
 import {
   ResolvedOptions,
   ServiceGraphChartProps,
+  TOOLTIP_PERCENTILES,
   resolveOptions,
 } from "./service-graph-chart-types";
 import { useServiceGraphData } from "./useServiceGraphData";
@@ -28,6 +38,10 @@ const MAX_NODE = 56;
 const FADED = 0.12;
 // A small graph is spread out at most this much, so two nodes do not end up at opposite edges.
 const MAX_UPSCALE = 1.6;
+/** Picker value for "every flow". */
+const ALL_FLOWS = "\u0000all";
+/** Picker value for a `root` that is a pattern rather than one caller's name. */
+const ROOT_PATTERN = "\u0000pattern";
 
 const KIND_LABELS: Record<NodeKind, string> = {
   service: "Service",
@@ -47,13 +61,30 @@ export function ServiceGraphChartComponent(
   const { results, isLoading, error, namespacePattern, rootPattern } =
     useServiceGraphData(spec, o);
 
+  // The requester picked in the panel; undefined follows the spec's `root` (usually a variable).
+  const [picked, setPicked] = useState<string | undefined>();
+  useEffect(() => setPicked(undefined), [rootPattern]);
+  const flowPattern =
+    picked === undefined
+      ? rootPattern
+      : picked === ALL_FLOWS
+        ? ""
+        : escapeRegex(picked);
+
   const graph: ServiceGraph | undefined = useMemo(
     () =>
       results
-        ? buildGraph(results, o, namespacePattern, rootPattern)
+        ? buildGraph(results, o, namespacePattern, flowPattern)
         : undefined,
-    [results, o, namespacePattern, rootPattern],
+    [results, o, namespacePattern, flowPattern],
   );
+  const pickerValue =
+    picked ??
+    (!rootPattern || rootPattern === ".*"
+      ? ALL_FLOWS
+      : graph?.callers.includes(rootPattern)
+        ? rootPattern
+        : ROOT_PATTERN);
 
   const [selected, setSelected] = useState<string | undefined>();
   useEffect(() => {
@@ -65,9 +96,9 @@ export function ServiceGraphChartComponent(
   const structureKey = useMemo(
     () =>
       graph
-        ? `${o.layout}|${graph.nodes.map((n) => n.id).join(",")}|${graph.edges
-            .map((e) => e.id)
-            .join(",")}`
+        ? `${o.layout}|${graph.roots.join(",")}|${graph.nodes
+            .map((n) => n.id)
+            .join(",")}|${graph.edges.map((e) => e.id).join(",")}`
         : "",
     [graph, o.layout],
   );
@@ -75,8 +106,8 @@ export function ServiceGraphChartComponent(
     if (!graph) return new Map<string, { x: number; y: number }>();
     const ids = graph.nodes.map((n) => n.id);
     return o.layout === "hierarchical"
-      ? hierarchicalLayout(ids, graph.edges)
-      : forceLayout(ids, graph.edges);
+      ? hierarchicalLayout(ids, graph.edges, graph.roots)
+      : forceLayout(ids, graph.edges, graph.roots);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [structureKey]);
 
@@ -113,8 +144,8 @@ export function ServiceGraphChartComponent(
   const width = contentDimensions?.width ?? 0;
   const height = contentDimensions?.height ?? 0;
   const box = useMemo(
-    () => fitBox(positions, width, height, o.showLegend),
-    [positions, width, height, o.showLegend],
+    () => fitBox(positions, width, height, o.showLegend, o.showRequesterPicker),
+    [positions, width, height, o.showLegend, o.showRequesterPicker],
   );
 
   const option = useMemo(() => {
@@ -127,6 +158,8 @@ export function ServiceGraphChartComponent(
   const empty = graph && graph.nodes.length === 0;
   let message: string | undefined;
   if (error) message = error.message;
+  else if (empty && flowPattern && graph.callers.length > 0)
+    message = "No calls from this requester in the time range.";
   else if (empty)
     message = namespacePattern
       ? `No requests for namespace "${namespacePattern}". If the graph is empty for every namespace, check that the generator adds the ${o.clientNamespaceLabel} / ${o.serverNamespaceLabel} dimensions.`
@@ -172,8 +205,135 @@ export function ServiceGraphChartComponent(
       {o.showLegend && graph && !message ? (
         <Legend graph={graph} options={o} colors={colors} />
       ) : null}
+      {o.showRequesterPicker && graph && graph.callers.length > 0 ? (
+        <RequesterPicker
+          value={pickerValue}
+          graph={graph}
+          rootPattern={rootPattern}
+          colors={colors}
+          onChange={setPicked}
+        />
+      ) : null}
     </Box>
   );
+}
+
+/**
+ * Who the flow starts from: the `user` entry point or a service. One requester at a time, so the graph
+ * reads left to right from a single source to every call its requests lead to.
+ */
+function RequesterPicker({
+  value,
+  graph,
+  rootPattern,
+  colors,
+  onChange,
+}: {
+  value: string;
+  graph: ServiceGraph;
+  rootPattern: string;
+  colors: LegendColors;
+  onChange: (v: string) => void;
+}): ReactElement {
+  const kinds = new Map(graph.nodes.map((n) => [n.id, n.kind]));
+  return (
+    <TextField
+      select
+      size="small"
+      label="Requester"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      sx={{
+        position: "absolute",
+        top: 4,
+        left: 8,
+        zIndex: 2,
+        minWidth: 180,
+        maxWidth: "60%",
+        bgcolor: "background.paper",
+        "& .MuiSelect-select": {
+          display: "flex",
+          alignItems: "center",
+          gap: 1,
+          py: 0.5,
+          fontSize: 13,
+        },
+      }}
+    >
+      <MenuItem value={ALL_FLOWS}>All flows</MenuItem>
+      {value === ROOT_PATTERN ? (
+        <MenuItem value={ROOT_PATTERN}>Matching {rootPattern}</MenuItem>
+      ) : null}
+      {/* A picked requester with no calls in the current range stays selectable. */}
+      {[
+        ...(value !== ALL_FLOWS &&
+        value !== ROOT_PATTERN &&
+        !graph.callers.includes(value)
+          ? [value]
+          : []),
+        ...graph.callers,
+      ].map((id) => {
+        const kind: NodeKind =
+          kinds.get(id) ?? (id === "user" ? "user" : "service");
+        return (
+          <MenuItem
+            key={id}
+            value={id}
+            sx={{ display: "flex", alignItems: "center", gap: 1, fontSize: 13 }}
+          >
+            <img
+              src={iconDataUrl(iconFor(id, kind), { fill: colors.kind[kind] })}
+              width={16}
+              height={16}
+              alt=""
+              aria-hidden="true"
+            />
+            {id}
+          </MenuItem>
+        );
+      })}
+    </TextField>
+  );
+}
+
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function hexToRgb(hex: string): [number, number, number] | undefined {
+  const m = /^#([0-9a-f]{6})$/i.exec(hex);
+  if (!m) return undefined;
+  const n = parseInt(m[1]!, 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+function mix(a: string, b: string, t: number): string {
+  const ca = hexToRgb(a);
+  const cb = hexToRgb(b);
+  if (!ca || !cb) return t < 0.5 ? a : b;
+  const c = ca.map((v, i) => Math.round(v + (cb[i]! - v) * t));
+  return `rgb(${c.join(",")})`;
+}
+
+/**
+ * Edge and ring colour. By latency it is a gradient: neutral under the warning threshold, then from the
+ * warning colour at the warning threshold to the critical colour at the critical one (on a log scale,
+ * so 100 ms to 1 s has its midpoint at about 316 ms). By errors it steps at the two thresholds.
+ */
+export function itemColor(
+  item: { errorRatio: number; latency: number },
+  o: ResolvedOptions,
+  colors: LegendColors,
+): string {
+  if (o.edgeColorBy !== "latency")
+    return colors.severity[itemSeverity(item, o)];
+  const { warning, critical } = o.latencyThresholds;
+  const l = item.latency;
+  if (!Number.isFinite(l) || l < warning) return colors.severity.ok;
+  if (l >= critical || critical <= warning || warning <= 0)
+    return colors.severity.critical;
+  const t = Math.log(l / warning) / Math.log(critical / warning);
+  return mix(colors.severity.warning, colors.severity.critical, t);
 }
 
 function nodeSize(n: GraphNode, max: number, o: ResolvedOptions): number {
@@ -233,8 +393,14 @@ function fitBox(
   width: number,
   height: number,
   showLegend: boolean,
+  showPicker: boolean,
 ): SeriesBox {
-  const pad = { left: 70, right: 70, top: 28, bottom: showLegend ? 64 : 32 };
+  const pad = {
+    left: 70,
+    right: 70,
+    top: showPicker ? 56 : 28,
+    bottom: showLegend ? 64 : 32,
+  };
   const availW = Math.max(1, width - pad.left - pad.right);
   const availH = Math.max(1, height - pad.top - pad.bottom);
   let minX = Infinity;
@@ -278,15 +444,10 @@ function buildOption(
   const maxRate = Math.max(0, ...graph.edges.map((e) => e.rate));
   const pct = o.latencyPercentile;
 
-  // Neighbourhood of the clicked node: everything else fades.
-  let focus: Set<string> | undefined;
-  if (selected) {
-    focus = new Set([selected]);
-    for (const e of graph.edges) {
-      if (e.source === selected) focus.add(e.target);
-      if (e.target === selected) focus.add(e.source);
-    }
-  }
+  // The flow through the clicked node, upstream and downstream: everything else fades.
+  const flow = selected ? flowThrough(graph.edges, selected) : undefined;
+  const focus = flow?.nodes;
+  const roots = new Set(graph.roots);
   const pairs = new Set(graph.edges.map((e) => `${e.source}\u0000${e.target}`));
   const nodesById = new Map(graph.nodes.map((n) => [n.id, n]));
 
@@ -298,6 +459,7 @@ function buildOption(
     const outOfScope = !n.inScope;
     const opacity = faded ? FADED : outOfScope ? 0.45 : 1;
     const ring = sev === "warning" || sev === "critical";
+    const ringColor = itemColor(n, o, colors);
     return {
       id: n.id,
       name: n.id,
@@ -307,7 +469,7 @@ function buildOption(
       symbol: `image://${iconDataUrl(iconFor(n.id, n.kind), {
         fill: colors.kind[n.kind],
         ring: ring
-          ? colors.severity[sev]
+          ? ringColor
           : n.kind === "external"
             ? colors.externalBorder
             : undefined,
@@ -326,6 +488,8 @@ function buildOption(
         distance: 4,
         fontSize: 11,
         color: outOfScope ? text.secondary : text.primary,
+        // The requester the flow starts from.
+        fontWeight: roots.has(n.id) ? 700 : 400,
         // Keeps names readable where an edge runs under them.
         textBorderColor: paper,
         textBorderWidth: 3,
@@ -339,11 +503,8 @@ function buildOption(
   });
 
   const links = graph.edges.map((e) => {
-    const sev = itemSeverity(e, o);
     const reverse = pairs.has(`${e.target}\u0000${e.source}`);
-    const faded = focus
-      ? !(e.source === selected || e.target === selected)
-      : false;
+    const faded = flow ? !flow.edges.has(e.id) : false;
     const out =
       !nodesById.get(e.source)?.inScope || !nodesById.get(e.target)?.inScope;
     const label = edgeLabelText(e, o);
@@ -352,7 +513,7 @@ function buildOption(
       target: e.target,
       raw: e,
       lineStyle: {
-        color: colors.severity[sev],
+        color: itemColor(e, o, colors),
         width: edgeWidth(e, maxRate),
         opacity: faded ? 0.06 : out ? 0.4 : 0.9,
         curveness: reverse ? 0.2 : o.layout === "force" ? 0.06 : 0,
@@ -367,8 +528,7 @@ function buildOption(
     if (n.inRate > 0) {
       rows.push(["Requests in", formatRate(n.inRate)]);
       rows.push(["Errors", formatPercent(n.inFailed / n.inRate)]);
-      if (Number.isFinite(n.latency))
-        rows.push([`Latency ${pct}`, formatSeconds(n.latency)]);
+      rows.push(...latencyRows(n.percentiles, pct));
     }
     if (n.outRate > 0) {
       rows.push(["Requests out", formatRate(n.outRate)]);
@@ -388,7 +548,7 @@ function buildOption(
       ),
       rows,
       sev,
-      sev ? colors.severity[itemSeverity(n, o)] : "",
+      sev ? itemColor(n, o, colors) : "",
     );
   };
   const edgeTooltip = (e: GraphEdge): string => {
@@ -398,15 +558,19 @@ function buildOption(
         "Errors",
         `${formatPercent(e.errorRatio)} (${formatRate(e.failedRate)})`,
       ],
-      [`Latency ${pct} (${o.latencySource})`, formatSeconds(e.latency)],
+      ...latencyRows(e.percentiles, pct),
     ];
     const sev = severityLabel(itemSeverity(e, o), o);
     return tooltipHtml(
       `${escapeHtml(e.source)} → ${escapeHtml(e.target)}`,
-      e.connectionType ? escapeHtml(e.connectionType.replace(/_/g, " ")) : "",
+      escapeHtml(
+        [e.connectionType.replace(/_/g, " "), `${o.latencySource}-side latency`]
+          .filter(Boolean)
+          .join(" · "),
+      ),
       rows,
       sev,
-      sev ? colors.severity[itemSeverity(e, o)] : "",
+      sev ? itemColor(e, o, colors) : "",
     );
   };
 
@@ -462,6 +626,19 @@ function buildOption(
       },
     ],
   };
+}
+
+/** One row per tooltip percentile that has a value; the configured one is marked. */
+function latencyRows(
+  percentiles: Record<string, number>,
+  configured: string,
+): Array<[string, string]> {
+  return TOOLTIP_PERCENTILES.filter(([name]) =>
+    Number.isFinite(percentiles[name]),
+  ).map(([name]) => [
+    `Latency ${name}${name === configured ? " ●" : ""}`,
+    formatSeconds(percentiles[name]!),
+  ]);
 }
 
 function tooltipHtml(

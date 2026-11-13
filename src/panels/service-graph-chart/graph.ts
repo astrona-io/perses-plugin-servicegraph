@@ -1,4 +1,10 @@
-import { ResolvedOptions, Thresholds } from "./service-graph-chart-types";
+import { Buckets, addBucket, histogramQuantile } from "./histogram";
+import {
+  PERCENTILES,
+  ResolvedOptions,
+  TOOLTIP_PERCENTILES,
+  Thresholds,
+} from "./service-graph-chart-types";
 
 /** One sample of an instant-vector result. */
 export interface Sample {
@@ -9,9 +15,12 @@ export interface Sample {
 export interface GraphResults {
   requests: Sample[];
   failed: Sample[];
-  edgeLatency: Sample[];
-  nodeLatency: Sample[];
+  edgeBuckets: Sample[];
+  nodeBuckets: Sample[];
 }
+
+/** Latency in seconds per tooltip percentile (`p25` ... `p99`); NaN without samples. */
+export type Percentiles = Record<string, number>;
 
 /**
  * `service`: an instrumented service. `database` and `messaging`: the server end of a call that only
@@ -31,8 +40,9 @@ export interface GraphEdge {
   failedRate: number;
   /** 0..1, NaN without requests. */
   errorRatio: number;
-  /** Seconds, NaN when the histogram had no samples. */
+  /** Seconds at the configured percentile, NaN when the histogram had no samples. */
   latency: number;
+  percentiles: Percentiles;
   connectionType: string;
 }
 
@@ -50,11 +60,16 @@ export interface GraphNode {
   throughput: number;
   errorRatio: number;
   latency: number;
+  percentiles: Percentiles;
 }
 
 export interface ServiceGraph {
   nodes: GraphNode[];
   edges: GraphEdge[];
+  /** Every node that makes calls, before the root filter: the choices for the requester picker. */
+  callers: string[];
+  /** The nodes the drawn flow starts from; empty when every flow is drawn. */
+  roots: string[];
 }
 
 const SEP = "\u0000";
@@ -102,7 +117,6 @@ export function buildGraph(
     server: string;
     rate: number;
     failed: number;
-    latency: number;
     connectionType: string;
     clientNs: string;
     serverNs: string;
@@ -119,7 +133,6 @@ export function buildGraph(
       server,
       rate: 0,
       failed: 0,
-      latency: NaN,
       connectionType: "",
       clientNs: "",
       serverNs: "",
@@ -136,21 +149,11 @@ export function buildGraph(
     );
     if (acc && Number.isFinite(sample.value)) acc.failed += sample.value;
   }
-  for (const sample of results.edgeLatency) {
-    const acc = edges.get(
-      edgeKey(sample.metric[c] ?? "", sample.metric[s] ?? ""),
-    );
-    // With extra grouping labels there can be several quantiles per edge; keep the worst.
-    if (acc && Number.isFinite(sample.value))
-      acc.latency = Number.isNaN(acc.latency)
-        ? sample.value
-        : Math.max(acc.latency, sample.value);
-  }
-  const nodeLatency = new Map<string, number>();
-  for (const sample of results.nodeLatency) {
-    const id = sample.metric[s];
-    if (id && Number.isFinite(sample.value)) nodeLatency.set(id, sample.value);
-  }
+  const edgeBuckets = bucketsBy(results.edgeBuckets, (m) =>
+    m[c] && m[s] ? edgeKey(m[c], m[s]) : undefined,
+  );
+  const nodeBuckets = bucketsBy(results.nodeBuckets, (m) => m[s]);
+  const q = PERCENTILES[o.latencyPercentile];
 
   const scope = scopeMatcher(namespacePattern);
   const nodes = new Map<string, GraphNode>();
@@ -168,7 +171,8 @@ export function buildGraph(
         outFailed: 0,
         throughput: 0,
         errorRatio: NaN,
-        latency: nodeLatency.get(id) ?? NaN,
+        latency: histogramQuantile(q, nodeBuckets.get(id)),
+        percentiles: percentilesOf(nodeBuckets.get(id)),
       };
       nodes.set(id, n);
     }
@@ -217,7 +221,11 @@ export function buildGraph(
       rate: e.rate,
       failedRate: e.failed,
       errorRatio: e.rate > 0 ? e.failed / e.rate : NaN,
-      latency: e.latency,
+      latency: histogramQuantile(
+        q,
+        edgeBuckets.get(edgeKey(e.client, e.server)),
+      ),
+      percentiles: percentilesOf(edgeBuckets.get(edgeKey(e.client, e.server))),
       connectionType: e.connectionType,
     });
   }
@@ -237,7 +245,11 @@ export function buildGraph(
     if (scope && n.namespace) n.inScope = scope.test(n.namespace);
   }
 
+  const callers = [...new Set(graphEdges.map((e) => e.source))].sort(
+    (a, b) => Number(b === "user") - Number(a === "user") || a.localeCompare(b),
+  );
   const root = scopeMatcher(rootPattern);
+  const roots = root ? callers.filter((id) => root.test(id)) : [];
   const drawn = reachableFrom(graphEdges, root);
   const connected = new Set<string>();
   for (const e of drawn) {
@@ -252,7 +264,76 @@ export function buildGraph(
     )
     .sort((a, b) => a.id.localeCompare(b.id));
 
-  return { nodes: nodeList, edges: drawn };
+  return { nodes: nodeList, edges: drawn, callers, roots };
+}
+
+function bucketsBy(
+  samples: Sample[],
+  key: (metric: Record<string, string>) => string | undefined,
+): Map<string, Buckets> {
+  const out = new Map<string, Buckets>();
+  for (const sample of samples) {
+    const k = key(sample.metric);
+    const le = sample.metric.le;
+    if (!k || le === undefined) continue;
+    let b = out.get(k);
+    if (!b) out.set(k, (b = new Map()));
+    addBucket(b, le, sample.value);
+  }
+  return out;
+}
+
+function percentilesOf(buckets: Buckets | undefined): Percentiles {
+  const out: Percentiles = {};
+  for (const [name, q] of TOOLTIP_PERCENTILES)
+    out[name] = histogramQuantile(q, buckets);
+  return out;
+}
+
+/**
+ * The flow through one node: every call on a path into it (its callers, their callers, ...) and every
+ * call it leads to downstream. Clicking a node highlights this, so a request can be followed end to end.
+ */
+export function flowThrough(
+  edges: GraphEdge[],
+  id: string,
+): { nodes: Set<string>; edges: Set<string> } {
+  const walk = (
+    from: (e: GraphEdge) => string,
+    to: (e: GraphEdge) => string,
+  ): Set<string> => {
+    const next = new Map<string, string[]>();
+    for (const e of edges) {
+      const list = next.get(from(e)) ?? [];
+      list.push(to(e));
+      next.set(from(e), list);
+    }
+    const seen = new Set([id]);
+    const queue = [id];
+    while (queue.length)
+      for (const n of next.get(queue.shift()!) ?? [])
+        if (!seen.has(n)) {
+          seen.add(n);
+          queue.push(n);
+        }
+    return seen;
+  };
+  const up = walk(
+    (e) => e.target,
+    (e) => e.source,
+  );
+  const down = walk(
+    (e) => e.source,
+    (e) => e.target,
+  );
+  const kept = new Set<string>();
+  for (const e of edges)
+    if (
+      (up.has(e.source) && up.has(e.target)) ||
+      (down.has(e.source) && down.has(e.target))
+    )
+      kept.add(e.id);
+  return { nodes: new Set([...up, ...down]), edges: kept };
 }
 
 /**

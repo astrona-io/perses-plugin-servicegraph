@@ -1,4 +1,4 @@
-import { ReactElement } from "react";
+import { ReactElement, useId } from "react";
 import { Box, Typography } from "@mui/material";
 import { NodeKind, ServiceGraph, Severity } from "./graph";
 import { formatSeconds } from "./format";
@@ -67,6 +67,38 @@ function Line({ color }: { color: string }): ReactElement {
   );
 }
 
+/** Line shading from the warning to the critical colour, for colouring by latency. */
+function GradientLine({
+  from,
+  to,
+}: {
+  from: string;
+  to: string;
+}): ReactElement {
+  // Unique per legend: several panels on one dashboard each define their gradient.
+  const id = useId();
+  return (
+    <svg width="34" height="12" viewBox="0 0 34 12" aria-hidden="true">
+      <defs>
+        <linearGradient id={id} x1="0" x2="1" y1="0" y2="0">
+          <stop offset="0" stopColor={from} />
+          <stop offset="1" stopColor={to} />
+        </linearGradient>
+      </defs>
+      <line
+        x1="1"
+        y1="6"
+        x2="29"
+        y2="6"
+        stroke={`url(#${CSS.escape(id)})`}
+        strokeWidth="2.5"
+        strokeLinecap="round"
+      />
+      <path d="M28 2.5 L33 6 L28 9.5 Z" fill={to} />
+    </svg>
+  );
+}
+
 function Item({
   icon,
   label,
@@ -122,14 +154,28 @@ export function Legend({
         icon={<Line color={colors.severity.ok} />}
         label={`${what} < ${fmt(t.warning)}`}
       />
-      <Item
-        icon={<Line color={colors.severity.warning} />}
-        label={`≥ ${fmt(t.warning)}`}
-      />
-      <Item
-        icon={<Line color={colors.severity.critical} />}
-        label={`≥ ${fmt(t.critical)}`}
-      />
+      {latency ? (
+        <Item
+          icon={
+            <GradientLine
+              from={colors.severity.warning}
+              to={colors.severity.critical}
+            />
+          }
+          label={`${fmt(t.warning)} → ${fmt(t.critical)}+`}
+        />
+      ) : (
+        <>
+          <Item
+            icon={<Line color={colors.severity.warning} />}
+            label={`≥ ${fmt(t.warning)}`}
+          />
+          <Item
+            icon={<Line color={colors.severity.critical} />}
+            label={`≥ ${fmt(t.critical)}`}
+          />
+        </>
+      )}
       <Box component="span" sx={{ width: 8 }} />
       {kinds.map((k) => (
         <Item
@@ -140,7 +186,7 @@ export function Legend({
       ))}
       <Box component="span" sx={{ width: 8 }} />
       <Typography variant="caption" sx={{ color: "text.secondary" }}>
-        Width = req/s · click a node to focus
+        Width = req/s · click a node to trace its flow
       </Typography>
     </Box>
   );

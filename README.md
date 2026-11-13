@@ -20,7 +20,7 @@ The screenshots use synthetic data for a demo namespace, `shop`.
 
 | Plugin | Perses | Status |
 | --- | --- | --- |
-| 0.1.x, 0.2.x | v0.54.x | Tested with v0.54.0 |
+| 0.1.x – 0.3.x | v0.54.x | Tested with v0.54.0 |
 
 The plugin is built against `@perses-dev/*` 0.54 and `percli` v0.54.0. Other Perses minor versions may
 work but are not tested; see [Why ECharts](#why-echarts) for the part most likely to break.
@@ -31,17 +31,25 @@ work but are not tested; see [Why ECharts](#why-echarts) for the part most likel
   error ratio or latency of what they served, and their icon shows the kind of node (below).
 - **Edges** point from caller to callee. Width follows request rate, colour follows error ratio or
   latency, and an optional label shows rate, error ratio, latency, or rate with latency below it.
-  Rates under 0.01 req/s are shown per minute or per hour.
-- **Tooltips:** on a node, requests in and out, error ratio, latency, kind and namespace; on an edge,
-  request rate, error ratio with the failed rate, and latency.
-- **Hover** a node to highlight its neighbours. **Click** a node to keep that focus; click it again or
-  the empty canvas to clear it.
+  Rates under 0.01 req/s are shown per minute or per hour. Coloured by latency, an edge stays neutral
+  below the warning threshold and shades from the warning colour to red between the two thresholds
+  (for example 100 ms to 1 s).
+- **Tooltips:** on a node, requests in and out, error ratio, latency p25, p50, p75, p90, p95 and p99,
+  kind and namespace; on an edge, request rate, error ratio with the failed rate, and the same
+  percentiles. They are computed in the browser from the histogram buckets (one query, same result as
+  `histogram_quantile`).
+- **Hover** a node to highlight its neighbours. **Click** a node to trace the flow through it: every
+  call on a path into it and everything it leads to downstream stay lit, the rest fades. Click it
+  again or the empty canvas to clear it.
 - **Namespace filter.** With a namespace set (usually `$namespace`), the panel keeps edges where
   either end, both ends, only the caller or only the callee is in the namespace. Nodes outside it are
   dimmed and named `service (namespace)`.
-- **Start from.** With `root` set (usually `$root`), the panel draws one flow: the calls the matching
-  nodes make, then the calls those lead to, downstream. `user` shows what incoming requests reach; a
-  job or worker shows what it touches. Empty draws every flow.
+- **Requester picker.** A **Requester** menu in the top left of the panel lists every caller: `user`
+  (requests coming in from outside) first, then each service. Pick one and the panel draws a single
+  flow from it: the calls it makes, then the calls those lead to, down to the last hop. The requester
+  is the only source, in the first column, in bold. **All flows** draws everything. The picker starts
+  at `root` (a name, a regex, or a variable such as `$root`) and follows it when that changes;
+  `showRequesterPicker: false` hides it.
 - **Layouts:** force-directed, or hierarchical from left (entry points) to right (leaves).
   Disconnected parts of the graph are laid out separately and stacked, largest first. Both layouts are
   deterministic, so the graph does not jump between refreshes.
@@ -91,13 +99,13 @@ sum by (client, server, connection_type, client_k8s_namespace_name, server_k8s_n
 
 # failed requests per edge: the same with traces_service_graph_request_failed_total
 
-# p95 latency per edge
-histogram_quantile(0.95, sum by (client, server, connection_type, ..., le) (
-  (rate(traces_service_graph_request_server_seconds_bucket{client_k8s_namespace_name=~"shop"}[3600s]) or ...)))
+# latency buckets per edge; every percentile is read from these in the browser
+sum by (client, server, le) (
+  (rate(traces_service_graph_request_server_seconds_bucket{client_k8s_namespace_name=~"shop"}[3600s]) or ...))
 
-# p95 latency per node (everything it served)
-histogram_quantile(0.95, sum by (server, le) (
-  (rate(traces_service_graph_request_server_seconds_bucket{client_k8s_namespace_name=~"shop"}[3600s]) or ...)))
+# latency buckets per node (everything it served)
+sum by (server, le) (
+  (rate(traces_service_graph_request_server_seconds_bucket{client_k8s_namespace_name=~"shop"}[3600s]) or ...))
 ```
 
 The window is the whole dashboard range unless the spec sets `window`. The namespace labels are only
@@ -157,7 +165,8 @@ plugin:
     clientNamespaceLabel: client_k8s_namespace_name
     serverNamespaceLabel: server_k8s_namespace_name
     serviceFilter: "checkout|payments"     # regex; keeps edges where either end matches
-    root: $root                            # regex on node names; only the flows these start; "" = all
+    root: user                             # where the requester picker starts; name, regex or $var; "" = all
+    showRequesterPicker: true
     latencyPercentile: p95                 # p50 | p90 | p95 | p99
     latencySource: server                  # server (callee) | client (caller, network included)
     edgeColorBy: errors                    # errors | latency
@@ -183,18 +192,6 @@ variables:
         spec:
           labelName: client_k8s_namespace_name
           matchers: [traces_service_graph_request_total]
-  - kind: ListVariable
-    spec:
-      name: root
-      display: { name: Start from }
-      allowAllValue: true
-      customAllValue: ".*"
-      defaultValue: user
-      plugin:
-        kind: PrometheusLabelValuesVariable
-        spec:
-          labelName: client
-          matchers: ['traces_service_graph_request_total{server_k8s_namespace_name=~"$namespace"}']
 panels:
   serviceGraph:
     kind: Panel
@@ -204,9 +201,11 @@ panels:
         kind: ServiceGraphChart
         spec:
           namespace: $namespace
-          root: $root
+          root: user
           layout: hierarchical
           edgeLabel: rate-latency
+          edgeColorBy: latency
+          latencyThresholds: { warning: 0.1, critical: 1 }
 ```
 
 The panel has no query editor: it builds its queries from the spec, which the Settings tab edits.

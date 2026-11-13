@@ -103,13 +103,13 @@ export function useServiceGraphData(
           value: Number(r.value[1]),
         }));
       };
-      const [requests, failed, edgeLatency, nodeLatency] = await Promise.all([
+      const [requests, failed, edgeBuckets, nodeBuckets] = await Promise.all([
         run(queries.requests),
         run(queries.failed),
-        run(queries.edgeLatency),
-        run(queries.nodeLatency),
+        run(queries.edgeBuckets),
+        run(queries.nodeBuckets),
       ]);
-      return { requests, failed, edgeLatency, nodeLatency };
+      return { requests, failed, edgeBuckets, nodeBuckets };
     },
   });
 

@@ -19,11 +19,14 @@ const ROW_GAP = 90;
 
 /**
  * Left-to-right layers, one block per connected group of services, stacked top to bottom with the
- * largest first so unrelated groups do not interleave and cross each other's edges.
+ * largest first so unrelated groups do not interleave and cross each other's edges. `roots` (the
+ * requester of a flow) start the walk, so they sit alone in the first column even when a call further
+ * down loops back to them.
  */
 export function hierarchicalLayout(
   ids: string[],
   links: Link[],
+  roots: string[] = [],
 ): Map<string, Point> {
   const points = new Map<string, Point>();
   let top = 0;
@@ -32,6 +35,7 @@ export function hierarchicalLayout(
     const part = layeredLayout(
       group,
       links.filter((l) => set.has(l.source) && set.has(l.target)),
+      new Set(roots),
     );
     let minY = Infinity;
     let maxY = -Infinity;
@@ -74,7 +78,11 @@ function components(ids: string[], links: Link[]): string[][] {
  * within a column are ordered by the average position of their neighbours (a few barycentre sweeps)
  * to cut down on crossings.
  */
-function layeredLayout(ids: string[], links: Link[]): Map<string, Point> {
+function layeredLayout(
+  ids: string[],
+  links: Link[],
+  roots: Set<string>,
+): Map<string, Point> {
   const out = new Map<string, string[]>();
   const indegree = new Map<string, number>();
   for (const id of ids) {
@@ -91,7 +99,9 @@ function layeredLayout(ids: string[], links: Link[]): Map<string, Point> {
   // Break cycles: walk from the roots first so the natural direction wins.
   const order = [...ids].sort(
     (a, b) =>
-      (indegree.get(a) ?? 0) - (indegree.get(b) ?? 0) || a.localeCompare(b),
+      Number(roots.has(b)) - Number(roots.has(a)) ||
+      (indegree.get(a) ?? 0) - (indegree.get(b) ?? 0) ||
+      a.localeCompare(b),
   );
   const state = new Map<string, 1 | 2>(); // 1 = on stack, 2 = done
   const dag = new Map<string, string[]>(ids.map((id) => [id, []]));
@@ -189,8 +199,12 @@ function layeredLayout(ids: string[], links: Link[]): Map<string, Point> {
  * untangled and keeps a rough left-to-right flow. A fixed number of iterations with a cooling
  * temperature keeps it deterministic and cheap for the few hundred nodes a namespace has.
  */
-export function forceLayout(ids: string[], links: Link[]): Map<string, Point> {
-  const seed = hierarchicalLayout(ids, links);
+export function forceLayout(
+  ids: string[],
+  links: Link[],
+  roots: string[] = [],
+): Map<string, Point> {
+  const seed = hierarchicalLayout(ids, links, roots);
   const n = ids.length;
   if (n <= 1) return seed;
 
