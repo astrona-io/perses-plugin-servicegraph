@@ -4,6 +4,25 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [0.3.0] - 2026-11-13
+
+### Added
+
+- Requester picker in the panel: choose `user` or any calling service and see the single flow its
+  requests take, down to the last hop. Starts at `root`; `showRequesterPicker` hides it.
+- Clicking a node traces the flow through it (every path into it and everything downstream) instead
+  of only its direct neighbours.
+- Latency p25, p50, p75, p90, p95 and p99 in edge and node tooltips.
+
+### Changed
+
+- Colouring by latency is a gradient: neutral under the warning threshold, then from the warning
+  colour to the critical colour between the two thresholds. The legend shows the gradient.
+- Latency comes from one bucket query per edge and per node, with the percentiles computed in the
+  browser, instead of a `histogram_quantile` query per percentile. An edge seen in several
+  namespaces now has one merged histogram rather than the worst of its quantiles.
+- The requester of a flow is always the first column of the hierarchical layout, in bold.
+
 ## [0.2.0] - 2026-11-13
 
 ### Added

@@ -12,16 +12,17 @@
     "clientNamespaceLabel": "client_k8s_namespace_name",
     "serverNamespaceLabel": "server_k8s_namespace_name",
     "namespaceMatch": "either",
-    "root": "$root",
+    "root": "user",
+    "showRequesterPicker": true,
     "latencyPercentile": "p95",
     "latencySource": "server",
-    "edgeColorBy": "errors",
+    "edgeColorBy": "latency",
     "errorThresholds": {
       "warning": 1,
       "critical": 5
     },
     "latencyThresholds": {
-      "warning": 0.5,
+      "warning": 0.1,
       "critical": 1
     },
     "layout": "hierarchical",

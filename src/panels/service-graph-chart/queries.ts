@@ -1,15 +1,15 @@
-import { PERCENTILES, ResolvedOptions } from "./service-graph-chart-types";
+import { ResolvedOptions } from "./service-graph-chart-types";
 
-/** The four instant queries the panel runs. Each returns one sample per edge (or per node). */
+/** The four instant queries the panel runs. Each returns one sample per edge (or per node, or bucket). */
 export interface GraphQueries {
   /** Requests per second, by edge. */
   requests: string;
   /** Failed requests per second, by edge. */
   failed: string;
-  /** Latency percentile in seconds, by edge. */
-  edgeLatency: string;
-  /** Latency percentile in seconds of everything a service served (server side), by node. */
-  nodeLatency: string;
+  /** Latency histogram bucket rates, by edge and `le`; the percentiles are read from them (histogram.ts). */
+  edgeBuckets: string;
+  /** Bucket rates of everything a service served (server side), by node and `le`. */
+  nodeBuckets: string;
 }
 
 /** Values after dashboard variables have been expanded. */
@@ -93,7 +93,6 @@ export function buildQueries(
 ): GraphQueries {
   const sets = filterSets(o, inputs);
   const by = edgeGroupLabels(o, inputs.namespace !== "").join(", ");
-  const q = PERCENTILES[o.latencyPercentile];
   const p = o.metricPrefix;
   const w = inputs.window;
   // Node latency is always what the service took to answer, so it reads the server-side histogram.
@@ -104,15 +103,16 @@ export function buildQueries(
   return {
     requests: `sum by (${by}) (${rateOf(`${p}_request_total`, sets, w)})`,
     failed: `sum by (${by}) (${rateOf(`${p}_request_failed_total`, sets, w)})`,
-    edgeLatency: `histogram_quantile(${q}, sum by (${by}, le) (${rateOf(
+    // Only the two ends: series of one edge in several namespaces add up to one histogram.
+    edgeBuckets: `sum by (${o.clientLabel}, ${o.serverLabel}, le) (${rateOf(
       `${o.latencyMetric}_bucket`,
       sets,
       w,
-    )}))`,
-    nodeLatency: `histogram_quantile(${q}, sum by (${o.serverLabel}, le) (${rateOf(
+    )})`,
+    nodeBuckets: `sum by (${o.serverLabel}, le) (${rateOf(
       `${serverHistogram}_bucket`,
       sets,
       w,
-    )}))`,
+    )})`,
   };
 }

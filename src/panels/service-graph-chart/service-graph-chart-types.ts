@@ -55,11 +55,20 @@ export interface ServiceGraphChartOptions {
    */
   root?: string;
 
+  /**
+   * Show a requester picker in the panel: pick one caller (the `user` entry point or a service) and see
+   * the flow its requests take downstream. Starts at `root`. Default true.
+   */
+  showRequesterPicker?: boolean;
+
   /** Latency percentile from the histogram. Default `p95`. */
   latencyPercentile?: LatencyPercentile;
   /** Server-side (callee) or client-side (caller) latency histogram. Default `server`. */
   latencySource?: LatencySource;
-  /** What edge and node colours show. Default `errors`. */
+  /**
+   * What edge and node colours show. Default `errors`. With `latency`, an edge below the warning threshold
+   * is neutral and shades from the warning colour to the critical colour between the two thresholds.
+   */
   edgeColorBy?: EdgeColorBy;
   /** Error ratio thresholds in percent. Default warning 1, critical 5. */
   errorThresholds?: Thresholds;
@@ -98,6 +107,16 @@ export const PERCENTILES: Record<LatencyPercentile, number> = {
   p99: 0.99,
 };
 
+/** Percentiles listed in the edge and node tooltips. */
+export const TOOLTIP_PERCENTILES: Array<[string, number]> = [
+  ["p25", 0.25],
+  ["p50", 0.5],
+  ["p75", 0.75],
+  ["p90", 0.9],
+  ["p95", 0.95],
+  ["p99", 0.99],
+];
+
 export function createInitialServiceGraphChartOptions(): ServiceGraphChartOptions {
   return {
     metricPrefix: DEFAULT_METRIC_PREFIX,
@@ -132,6 +151,7 @@ export interface ResolvedOptions {
   namespaceMatch: NamespaceMatch;
   serviceFilter: string;
   root: string;
+  showRequesterPicker: boolean;
   latencyPercentile: LatencyPercentile;
   latencySource: LatencySource;
   edgeColorBy: EdgeColorBy;
@@ -168,6 +188,7 @@ export function resolveOptions(
     namespaceMatch: spec.namespaceMatch ?? "either",
     serviceFilter: spec.serviceFilter ?? "",
     root: spec.root ?? "",
+    showRequesterPicker: spec.showRequesterPicker ?? true,
     latencyPercentile: spec.latencyPercentile ?? "p95",
     latencySource,
     edgeColorBy: spec.edgeColorBy ?? "errors",

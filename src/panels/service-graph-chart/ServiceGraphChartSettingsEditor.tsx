@@ -259,10 +259,22 @@ export function ServiceGraphChartSettingsEditor(
             onChange={(serviceFilter) => set({ serviceFilter })}
           />
           <TextControl
-            label="Start from"
-            description="Regex on node names, such as $root or user: draws only the calls these nodes make and what those lead to downstream"
+            label="Requester"
+            description="Regex on node names, such as $root or user: draws only the calls these nodes make and what those lead to downstream. The requester picker starts here."
             value={value.root}
             onChange={(root) => set({ root })}
+          />
+          <OptionsEditorControl
+            label="Requester picker"
+            description="Pick in the panel which caller the flow starts from"
+            control={
+              <Switch
+                checked={value.showRequesterPicker ?? true}
+                onChange={(_, showRequesterPicker) =>
+                  set({ showRequesterPicker })
+                }
+              />
+            }
           />
         </OptionsEditorGroup>
       </OptionsEditorColumn>
