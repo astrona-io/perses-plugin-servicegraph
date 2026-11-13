@@ -4,6 +4,14 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [0.5.1] - 2026-11-13
+
+### Added
+
+- Releases are built on GitHub: a tag `v<version>` publishes the plugin archive and its checksum on
+  the GitHub release and the plugin image as `ghcr.io/astrona-io/perses-plugin-servicegraph:v<version>` (linux/amd64 and
+  linux/arm64), with build provenance attestations.
+
 ## [0.5.0] - 2026-11-13
 
 ### Added

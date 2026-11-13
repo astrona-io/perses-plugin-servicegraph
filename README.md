@@ -282,7 +282,8 @@ plugin:
 ### Option B: Kubernetes image volume
 
 The `Containerfile` packages the archive as a plugin-only OCI image (`FROM scratch`, the archive at the
-image root). Build and push it to your registry:
+image root). Every release publishes it as `ghcr.io/astrona-io/perses-plugin-servicegraph:v<version>` for linux/amd64 and
+linux/arm64, so you can use that image directly. To build and push it to your own registry instead:
 
 ```bash
 percli plugin build
