@@ -258,6 +258,12 @@ export function ServiceGraphChartSettingsEditor(
             value={value.serviceFilter}
             onChange={(serviceFilter) => set({ serviceFilter })}
           />
+          <TextControl
+            label="Start from"
+            description="Regex on node names, such as $root or user: draws only the calls these nodes make and what those lead to downstream"
+            value={value.root}
+            onChange={(root) => set({ root })}
+          />
         </OptionsEditorGroup>
       </OptionsEditorColumn>
       <OptionsEditorColumn>
@@ -279,6 +285,7 @@ export function ServiceGraphChartSettingsEditor(
               ["rate", "Request rate"],
               ["errors", "Error ratio"],
               ["latency", "Latency"],
+              ["rate-latency", "Request rate and latency"],
             ]}
             onChange={(edgeLabel) => set({ edgeLabel })}
           />

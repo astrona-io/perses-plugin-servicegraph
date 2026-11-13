@@ -11,6 +11,7 @@ import {
   itemSeverity,
 } from "./graph";
 import { escapeHtml, formatPercent, formatRate, formatSeconds } from "./format";
+import { iconDataUrl, iconFor } from "./icons";
 import { forceLayout, hierarchicalLayout } from "./layout";
 import { GraphCanvas } from "./GraphCanvas";
 import { Legend, LegendColors } from "./Legend";
@@ -36,14 +37,6 @@ const KIND_LABELS: Record<NodeKind, string> = {
   external: "Uninstrumented",
 };
 
-const KIND_SYMBOLS: Record<NodeKind, string> = {
-  service: "circle",
-  database: "roundRect",
-  messaging: "diamond",
-  user: "triangle",
-  external: "circle",
-};
-
 export function ServiceGraphChartComponent(
   props: ServiceGraphChartProps,
 ): ReactElement | null {
@@ -51,14 +44,15 @@ export function ServiceGraphChartComponent(
   const muiTheme = useTheme();
   const chartsTheme = useChartsTheme();
   const o = useMemo(() => resolveOptions(spec), [spec]);
-  const { results, isLoading, error, namespacePattern } = useServiceGraphData(
-    spec,
-    o,
-  );
+  const { results, isLoading, error, namespacePattern, rootPattern } =
+    useServiceGraphData(spec, o);
 
   const graph: ServiceGraph | undefined = useMemo(
-    () => (results ? buildGraph(results, o, namespacePattern) : undefined),
-    [results, o, namespacePattern],
+    () =>
+      results
+        ? buildGraph(results, o, namespacePattern, rootPattern)
+        : undefined,
+    [results, o, namespacePattern, rootPattern],
   );
 
   const [selected, setSelected] = useState<string | undefined>();
@@ -210,6 +204,11 @@ function edgeLabelText(e: GraphEdge, o: ResolvedOptions): string {
       return formatPercent(e.errorRatio);
     case "latency":
       return formatSeconds(e.latency);
+    case "rate-latency":
+      // No latency line when the histogram had no samples for this edge.
+      return Number.isFinite(e.latency)
+        ? `${formatRate(e.rate)}\n${o.latencyPercentile} ${formatSeconds(e.latency)}`
+        : formatRate(e.rate);
     default:
       return "";
   }
@@ -304,19 +303,22 @@ function buildOption(
       name: n.id,
       x: p.x,
       y: p.y,
-      symbol: KIND_SYMBOLS[n.kind],
-      symbolSize: n.kind === "database" ? [size * 1.1, size * 0.85] : size,
+      // The ring is part of the icon image: ECharts does not draw borders around image symbols.
+      symbol: `image://${iconDataUrl(iconFor(n.id, n.kind), {
+        fill: colors.kind[n.kind],
+        ring: ring
+          ? colors.severity[sev]
+          : n.kind === "external"
+            ? colors.externalBorder
+            : undefined,
+        ringWidth: ring ? 5 : 2.5,
+        dashed: !ring && n.kind === "external",
+      })}`,
+      symbolSize: size,
       raw: n,
       itemStyle: {
         color: colors.kind[n.kind],
         opacity,
-        borderColor: ring
-          ? colors.severity[sev]
-          : n.kind === "external"
-            ? colors.externalBorder
-            : paper,
-        borderWidth: ring ? 3.5 : n.kind === "external" ? 1.5 : 1.5,
-        borderType: n.kind === "external" ? "dashed" : "solid",
       },
       label: {
         show: true,

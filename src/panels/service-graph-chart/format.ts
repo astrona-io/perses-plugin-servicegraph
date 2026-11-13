@@ -13,7 +13,10 @@ export function formatRate(v: number): string {
   if (v >= 100) return `${v.toFixed(0)} req/s`;
   if (v >= 10) return `${trim(v, 1)} req/s`;
   if (v >= 0.01) return `${trim(v, 2)} req/s`;
-  return "<0.01 req/s";
+  // Quiet edges read better per minute or per hour than as "0.00x req/s".
+  if (v * 60 >= 0.1) return `${trim(v * 60, v * 60 >= 10 ? 0 : 1)} req/min`;
+  if (v * 3600 >= 0.1) return `${trim(v * 3600, v * 3600 >= 10 ? 0 : 1)} req/h`;
+  return "<0.1 req/h";
 }
 
 /** `ratio` is 0..1. */

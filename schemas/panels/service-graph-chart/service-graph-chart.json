@@ -12,6 +12,7 @@
     "clientNamespaceLabel": "client_k8s_namespace_name",
     "serverNamespaceLabel": "server_k8s_namespace_name",
     "namespaceMatch": "either",
+    "root": "$root",
     "latencyPercentile": "p95",
     "latencySource": "server",
     "edgeColorBy": "errors",
@@ -24,7 +25,7 @@
       "critical": 1
     },
     "layout": "hierarchical",
-    "edgeLabel": "rate",
+    "edgeLabel": "rate-latency",
     "nodeSizeByThroughput": true,
     "showUnconnected": false,
     "showLegend": true

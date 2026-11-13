@@ -14,7 +14,7 @@ export type LatencyPercentile = "p50" | "p90" | "p95" | "p99";
 export type LatencySource = "server" | "client";
 export type EdgeColorBy = "errors" | "latency";
 export type GraphLayout = "force" | "hierarchical";
-export type EdgeLabel = "none" | "rate" | "errors" | "latency";
+export type EdgeLabel = "none" | "rate" | "errors" | "latency" | "rate-latency";
 
 export interface Thresholds {
   warning: number;
@@ -49,6 +49,11 @@ export interface ServiceGraphChartOptions {
   namespaceMatch?: NamespaceMatch;
   /** Regex on service names; an edge is kept when either end matches. */
   serviceFilter?: string;
+  /**
+   * Regex on node names, usually a variable such as `$root`: only the calls these nodes start, and the
+   * calls those lead to downstream, are drawn. Empty means every flow.
+   */
+  root?: string;
 
   /** Latency percentile from the histogram. Default `p95`. */
   latencyPercentile?: LatencyPercentile;
@@ -126,6 +131,7 @@ export interface ResolvedOptions {
   serverNamespaceLabel: string;
   namespaceMatch: NamespaceMatch;
   serviceFilter: string;
+  root: string;
   latencyPercentile: LatencyPercentile;
   latencySource: LatencySource;
   edgeColorBy: EdgeColorBy;
@@ -161,6 +167,7 @@ export function resolveOptions(
       spec.serverNamespaceLabel || DEFAULT_SERVER_NAMESPACE_LABEL,
     namespaceMatch: spec.namespaceMatch ?? "either",
     serviceFilter: spec.serviceFilter ?? "",
+    root: spec.root ?? "",
     latencyPercentile: spec.latencyPercentile ?? "p95",
     latencySource,
     edgeColorBy: spec.edgeColorBy ?? "errors",
