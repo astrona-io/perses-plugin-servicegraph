@@ -79,12 +79,22 @@ export interface ServiceGraphChartOptions {
   layout?: GraphLayout;
   /** Text drawn on each edge. Default `none`. */
   edgeLabel?: EdgeLabel;
-  /** Scale nodes by their request rate. Default true. */
+  /** Scale nodes by their request rate. Default false: every node has the same size. */
   nodeSizeByThroughput?: boolean;
   /** Keep nodes whose edges had no requests in the window. Default false. */
   showUnconnected?: boolean;
   /** Default true. */
   showLegend?: boolean;
+
+  /** Click a node or an edge to open a details panel on the right. Default true. */
+  showDetails?: boolean;
+  /**
+   * Full request time per node: how long whole traces from the requester take when they reach it,
+   * from TraceQL metrics on the trace datasource. Default true.
+   */
+  showFullRequestTime?: boolean;
+  /** Tempo datasource for the full request time (selector or `$variable`). The default Tempo datasource when unset. */
+  traceDatasource?: DatasourceSelectValue<DatasourceSelector>;
 }
 
 export const DEFAULT_METRIC_PREFIX = "traces_service_graph";
@@ -99,6 +109,7 @@ export const DEFAULT_LATENCY_THRESHOLDS: Thresholds = {
   critical: 1,
 };
 export const PROMETHEUS_DATASOURCE_KIND = "PrometheusDatasource";
+export const TEMPO_DATASOURCE_KIND = "TempoDatasource";
 
 export const PERCENTILES: Record<LatencyPercentile, number> = {
   p50: 0.5,
@@ -130,7 +141,7 @@ export function createInitialServiceGraphChartOptions(): ServiceGraphChartOption
     latencyThresholds: DEFAULT_LATENCY_THRESHOLDS,
     layout: "force",
     edgeLabel: "none",
-    nodeSizeByThroughput: true,
+    nodeSizeByThroughput: false,
     showUnconnected: false,
     showLegend: true,
   };
@@ -162,6 +173,8 @@ export interface ResolvedOptions {
   nodeSizeByThroughput: boolean;
   showUnconnected: boolean;
   showLegend: boolean;
+  showDetails: boolean;
+  showFullRequestTime: boolean;
 }
 
 export function resolveOptions(
@@ -196,8 +209,10 @@ export function resolveOptions(
     latencyThresholds: spec.latencyThresholds ?? DEFAULT_LATENCY_THRESHOLDS,
     layout: spec.layout ?? "force",
     edgeLabel: spec.edgeLabel ?? "none",
-    nodeSizeByThroughput: spec.nodeSizeByThroughput ?? true,
+    nodeSizeByThroughput: spec.nodeSizeByThroughput ?? false,
     showUnconnected: spec.showUnconnected ?? false,
     showLegend: spec.showLegend ?? true,
+    showDetails: spec.showDetails ?? true,
+    showFullRequestTime: spec.showFullRequestTime ?? true,
   };
 }

@@ -14,6 +14,11 @@
     "namespaceMatch": "either",
     "root": "user",
     "showRequesterPicker": true,
+    "showDetails": true,
+    "showFullRequestTime": true,
+    "traceDatasource": {
+      "kind": "TempoDatasource"
+    },
     "latencyPercentile": "p95",
     "latencySource": "server",
     "edgeColorBy": "latency",
@@ -27,7 +32,7 @@
     },
     "layout": "hierarchical",
     "edgeLabel": "rate-latency",
-    "nodeSizeByThroughput": true,
+    "nodeSizeByThroughput": false,
     "showUnconnected": false,
     "showLegend": true
   }
