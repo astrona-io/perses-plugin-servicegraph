@@ -2,6 +2,7 @@ import { ReactElement } from "react";
 import { Box, Typography } from "@mui/material";
 import { NodeKind, ServiceGraph, Severity } from "./graph";
 import { formatSeconds } from "./format";
+import { iconDataUrl } from "./icons";
 import { ResolvedOptions } from "./service-graph-chart-types";
 
 export interface LegendColors {
@@ -32,36 +33,20 @@ function Shape({
   kind: NodeKind;
   colors: LegendColors;
 }): ReactElement {
-  const fill = colors.kind[kind];
-  const stroke = kind === "external" ? colors.externalBorder : "none";
-  const dash = kind === "external" ? "2 1.5" : undefined;
-  let shape: ReactElement;
-  switch (kind) {
-    case "database":
-      shape = <rect x="1" y="2.5" width="10" height="7" rx="2" fill={fill} />;
-      break;
-    case "messaging":
-      shape = <path d="M6 1 L11 6 L6 11 L1 6 Z" fill={fill} />;
-      break;
-    case "user":
-      shape = <path d="M6 1.5 L11 10.5 L1 10.5 Z" fill={fill} />;
-      break;
-    default:
-      shape = (
-        <circle
-          cx="6"
-          cy="6"
-          r="4.6"
-          fill={fill}
-          stroke={stroke}
-          strokeDasharray={dash}
-        />
-      );
-  }
+  const external = kind === "external";
   return (
-    <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
-      {shape}
-    </svg>
+    <img
+      src={iconDataUrl(kind, {
+        fill: colors.kind[kind],
+        ring: external ? colors.externalBorder : undefined,
+        ringWidth: 2.5,
+        dashed: external,
+      })}
+      width={14}
+      height={14}
+      alt=""
+      aria-hidden="true"
+    />
   );
 }
 

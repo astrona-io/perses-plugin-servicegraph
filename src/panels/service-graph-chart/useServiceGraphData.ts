@@ -38,6 +38,7 @@ export interface ServiceGraphData {
   results?: GraphResults;
   queries?: GraphQueries;
   namespacePattern: string;
+  rootPattern: string;
   isLoading: boolean;
   error?: Error;
 }
@@ -46,7 +47,7 @@ const MIN_WINDOW_SECONDS = 60;
 
 /**
  * Runs the four instant queries at the end of the dashboard's time range. Variables in the namespace,
- * service filter and label selector are expanded here, with Perses' default formatting (a multi-value
+ * service filter, root and label selector are expanded here, with Perses' default formatting (a multi-value
  * variable becomes `(a|b)`, which suits the `=~` matchers the queries use).
  */
 export function useServiceGraphData(
@@ -116,6 +117,7 @@ export function useServiceGraphData(
     results: result.data,
     queries,
     namespacePattern: namespace,
+    rootPattern: expand(o.root),
     isLoading:
       client.isLoading || (result.isLoading && result.fetchStatus !== "idle"),
     error: (client.error as Error | null) ?? result.error ?? undefined,

@@ -20,7 +20,7 @@ The screenshots use synthetic data for a demo namespace, `shop`.
 
 | Plugin | Perses | Status |
 | --- | --- | --- |
-| 0.1.x | v0.54.x | Tested with v0.54.0 |
+| 0.1.x, 0.2.x | v0.54.x | Tested with v0.54.0 |
 
 The plugin is built against `@perses-dev/*` 0.54 and `percli` v0.54.0. Other Perses minor versions may
 work but are not tested; see [Why ECharts](#why-echarts) for the part most likely to break.
@@ -28,9 +28,10 @@ work but are not tested; see [Why ECharts](#why-echarts) for the part most likel
 ## What it does
 
 - **Nodes** are services. Their size follows throughput (optional), their ring colour follows the
-  error ratio or latency of what they served, and their shape shows the kind of node (below).
+  error ratio or latency of what they served, and their icon shows the kind of node (below).
 - **Edges** point from caller to callee. Width follows request rate, colour follows error ratio or
-  latency, and an optional label shows rate, error ratio or latency.
+  latency, and an optional label shows rate, error ratio, latency, or rate with latency below it.
+  Rates under 0.01 req/s are shown per minute or per hour.
 - **Tooltips:** on a node, requests in and out, error ratio, latency, kind and namespace; on an edge,
   request rate, error ratio with the failed rate, and latency.
 - **Hover** a node to highlight its neighbours. **Click** a node to keep that focus; click it again or
@@ -38,6 +39,9 @@ work but are not tested; see [Why ECharts](#why-echarts) for the part most likel
 - **Namespace filter.** With a namespace set (usually `$namespace`), the panel keeps edges where
   either end, both ends, only the caller or only the callee is in the namespace. Nodes outside it are
   dimmed and named `service (namespace)`.
+- **Start from.** With `root` set (usually `$root`), the panel draws one flow: the calls the matching
+  nodes make, then the calls those lead to, downstream. `user` shows what incoming requests reach; a
+  job or worker shows what it touches. Empty draws every flow.
 - **Layouts:** force-directed, or hierarchical from left (entry points) to right (leaves).
   Disconnected parts of the graph are laid out separately and stacked, largest first. Both layouts are
   deterministic, so the graph does not jump between refreshes.
@@ -50,13 +54,26 @@ work but are not tested; see [Why ECharts](#why-echarts) for the part most likel
 The generators create a node for each end of a call, even when only one end was traced. The kind is
 derived from the `connection_type` label and from which side reported the call:
 
-| Kind | Shape | When |
+| Kind | Icon | When |
 | --- | --- | --- |
-| Service | circle | An instrumented service: it called something, or it served a call that has no connection type |
-| Database | rounded square | The callee of a `connection_type="database"` call |
-| Messaging | diamond | The callee of a `connection_type="messaging_system"` call |
-| User | triangle | The virtual caller `user`: requests that reached a service without a client span |
-| Uninstrumented | dashed circle | The callee of a `connection_type="virtual_node"` call, for example an external API |
+| Service | cube (a pod) | An instrumented service: it called something, or it served a call that has no connection type |
+| Database | cylinder | The callee of a `connection_type="database"` call |
+| Messaging | envelope | The callee of a `connection_type="messaging_system"` call |
+| User | person | The virtual caller `user`: requests that reached a service without a client span |
+| Uninstrumented | question mark, dashed ring | The callee of a `connection_type="virtual_node"` call, for example an external API |
+
+Every icon is a disc in the kind's colour with a white glyph; a warning or critical node gets a ring in
+the severity colour. Where a node's name names a common infrastructure role, that role's glyph replaces
+the kind's (first match wins, in this order):
+
+| Glyph | Name contains | Applies to |
+| --- | --- | --- |
+| Lightning (cache) | `redis`, `valkey`, `memcache`, `dragonfly`, `keydb`, `cache` | any kind but user |
+| Magnifier (search) | `elastic`, `opensearch`, `meili`, `typesense`, `solr`, `search` | any kind but user |
+| Archive box (object storage) | `minio`, `garage`, `s3`, `bucket`, `blob`, `object-store` | services, uninstrumented |
+| Key (identity) | `keycloak`, `oauth`, `oidc`, `idp`, `dex`, `authelia`, `authentik`, `auth` | services, uninstrumented |
+| Paper plane (mail) | `smtp`, `mail`, `sendgrid`, `mailgun`, `postmark`, `ses` | services, uninstrumented |
+| Globe (web front) | `nginx`, `envoy`, `traefik`, `haproxy`, `ingress`, `gateway`, `proxy`, `frontend`, `web` | services, uninstrumented |
 
 A node that shows up as an instrumented service anywhere in the graph is always drawn as a service.
 
@@ -140,13 +157,14 @@ plugin:
     clientNamespaceLabel: client_k8s_namespace_name
     serverNamespaceLabel: server_k8s_namespace_name
     serviceFilter: "checkout|payments"     # regex; keeps edges where either end matches
+    root: $root                            # regex on node names; only the flows these start; "" = all
     latencyPercentile: p95                 # p50 | p90 | p95 | p99
     latencySource: server                  # server (callee) | client (caller, network included)
     edgeColorBy: errors                    # errors | latency
     errorThresholds: { warning: 1, critical: 5 }       # percent
     latencyThresholds: { warning: 0.5, critical: 1 }   # seconds
     layout: force                          # force | hierarchical
-    edgeLabel: none                        # none | rate | errors | latency
+    edgeLabel: none                        # none | rate | errors | latency | rate-latency
     nodeSizeByThroughput: true
     showUnconnected: false                 # keep nodes whose edges had no requests
     showLegend: true
@@ -165,6 +183,18 @@ variables:
         spec:
           labelName: client_k8s_namespace_name
           matchers: [traces_service_graph_request_total]
+  - kind: ListVariable
+    spec:
+      name: root
+      display: { name: Start from }
+      allowAllValue: true
+      customAllValue: ".*"
+      defaultValue: user
+      plugin:
+        kind: PrometheusLabelValuesVariable
+        spec:
+          labelName: client
+          matchers: ['traces_service_graph_request_total{server_k8s_namespace_name=~"$namespace"}']
 panels:
   serviceGraph:
     kind: Panel
@@ -174,8 +204,9 @@ panels:
         kind: ServiceGraphChart
         spec:
           namespace: $namespace
+          root: $root
           layout: hierarchical
-          edgeLabel: rate
+          edgeLabel: rate-latency
 ```
 
 The panel has no query editor: it builds its queries from the spec, which the Settings tab edits.

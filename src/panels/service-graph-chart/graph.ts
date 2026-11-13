@@ -91,6 +91,7 @@ export function buildGraph(
   results: GraphResults,
   o: ResolvedOptions,
   namespacePattern: string,
+  rootPattern = "",
 ): ServiceGraph {
   const c = o.clientLabel;
   const s = o.serverLabel;
@@ -236,16 +237,49 @@ export function buildGraph(
     if (scope && n.namespace) n.inScope = scope.test(n.namespace);
   }
 
+  const root = scopeMatcher(rootPattern);
+  const drawn = reachableFrom(graphEdges, root);
   const connected = new Set<string>();
-  for (const e of graphEdges) {
+  for (const e of drawn) {
     connected.add(e.source);
     connected.add(e.target);
   }
   const nodeList = [...nodes.values()]
-    .filter((n) => o.showUnconnected || connected.has(n.id))
+    .filter(
+      (n) =>
+        connected.has(n.id) ||
+        (o.showUnconnected && (drawn === graphEdges || !!root?.test(n.id))),
+    )
     .sort((a, b) => a.id.localeCompare(b.id));
 
-  return { nodes: nodeList, edges: graphEdges };
+  return { nodes: nodeList, edges: drawn };
+}
+
+/**
+ * The edges a flow takes: every call made by a node matching `root`, then every call made by the
+ * nodes those reach, and so on downstream. All edges when there is no root.
+ */
+function reachableFrom(edges: GraphEdge[], root?: RegExp): GraphEdge[] {
+  if (!root) return edges;
+  const out = new Map<string, GraphEdge[]>();
+  for (const e of edges) {
+    const list = out.get(e.source) ?? [];
+    list.push(e);
+    out.set(e.source, list);
+  }
+  const seen = new Set([...out.keys()].filter((id) => root.test(id)));
+  const queue = [...seen];
+  const kept: GraphEdge[] = [];
+  while (queue.length) {
+    for (const e of out.get(queue.shift()!) ?? []) {
+      kept.push(e);
+      if (!seen.has(e.target)) {
+        seen.add(e.target);
+        queue.push(e.target);
+      }
+    }
+  }
+  return kept;
 }
 
 export function severity(value: number, t: Thresholds): Severity {

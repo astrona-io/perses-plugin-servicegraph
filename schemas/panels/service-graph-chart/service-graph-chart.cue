@@ -37,6 +37,8 @@ spec: close({
 	namespaceMatch?:       "either" | "both" | "client" | "server"
 	// Regex on service names.
 	serviceFilter?: string
+	// Regex on node names, usually $root: only the flows these nodes start.
+	root?: string
 
 	latencyPercentile?: "p50" | "p90" | "p95" | "p99"
 	latencySource?:     "server" | "client"
@@ -47,7 +49,7 @@ spec: close({
 	latencyThresholds?: #thresholds
 
 	layout?:               "force" | "hierarchical"
-	edgeLabel?:            "none" | "rate" | "errors" | "latency"
+	edgeLabel?:            "none" | "rate" | "errors" | "latency" | "rate-latency"
 	nodeSizeByThroughput?: bool
 	showUnconnected?:      bool
 	showLegend?:           bool
