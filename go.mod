@@ -1,10 +1,10 @@
 module github.com/astrona-io/perses-plugin-servicegraph
 
-go 1.26.2
+go 1.27.2
 
 require (
 	github.com/perses/perses v0.54.0-beta.2
-	github.com/perses/spec v0.2.0-beta.6
+	github.com/perses/spec v0.3.0
 )
 
 require (

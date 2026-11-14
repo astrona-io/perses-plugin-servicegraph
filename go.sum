@@ -33,6 +33,7 @@ github.com/perses/perses v0.54.0-beta.2 h1:0okxiICGuBdSD7IlCL3zgTE6fIzx/MbEBlL/D
 github.com/perses/perses v0.54.0-beta.2/go.mod h1:TxPV2XVxR4hs6Q6RSc+Bqqy//nUyVEN94vWtt2hjpN4=
 github.com/perses/spec v0.2.0-beta.6 h1:QppHTJudgwChcsp+miJRPKCe6QsIst3UwxBFuBBlWm0=
 github.com/perses/spec v0.2.0-beta.6/go.mod h1:hV2Hojz3oYF/3Trvsy4E7BE5bP1V6e1/T2ExtHwRfkw=
+github.com/perses/spec v0.3.0/go.mod h1:bbTvfdCprae8P4JHknL2VnIkLkTLXqV4stpOlZyxibo=
 github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 h1:Jamvg5psRIccs7FGNTlIRMkT8wgtp5eCXdBlqhYGL6U=
 github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/prometheus/client_golang v1.23.2 h1:Je96obch5RDVy3FDMndoUsjAhG5Edi49h0RJWRi/o0o=
