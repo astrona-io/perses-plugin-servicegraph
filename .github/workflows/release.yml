@@ -106,7 +106,7 @@ jobs:
               --verify-tag --title "$TAG" --notes "" "${flags[@]}"
           fi
 
-      - uses: actions/attest-build-provenance@v2
+      - uses: actions/attest-build-provenance@v4
         with:
           subject-path: ${{ steps.archive.outputs.archive }}
 
@@ -142,7 +142,7 @@ jobs:
           annotations: ${{ steps.meta.outputs.annotations }}
           push: true
 
-      - uses: actions/attest-build-provenance@v2
+      - uses: actions/attest-build-provenance@v4
         with:
           subject-name: ghcr.io/${{ github.repository }}
           subject-digest: ${{ steps.image.outputs.digest }}
